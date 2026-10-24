@@ -1,0 +1,102 @@
+rules_version = '2';
+// Règles de sécurité Hamoula (version de test)
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function authed() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function isAdmin() { return authed() && exists(/databases/$(database)/documents/admins/$(me())); }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // Liste des administrateurs (créée à la main dans la console)
+    match /admins/{uid} {
+      allow read: if authed() && me() == uid;
+      allow write: if false;
+    }
+
+    // Compte privé : seul le propriétaire (ou un admin) le lit.
+    // L'utilisateur ne peut pas se vérifier ni se débloquer lui-même.
+    match /users/{uid} {
+      allow read: if authed() && (me() == uid || isAdmin());
+      allow create: if authed() && me() == uid
+        && request.resource.data.verif == 'pending' && request.resource.data.status == 'active';
+      allow update: if isAdmin() || (authed() && me() == uid
+        && !changed().hasAny(['verif', 'status', 'suspendedUntil', 'sanctionMsg', 'strikes']));
+      match /private/{doc} {
+        allow read, write: if authed() && (me() == uid || isAdmin());
+      }
+    }
+
+    // Fiche publique (annuaire des transporteurs)
+    match /publicProfiles/{uid} {
+      allow read: if authed();
+      allow create: if authed() && me() == uid && request.resource.data.verified == false
+        && request.resource.data.ratingSum == 0 && request.resource.data.ratingCount == 0;
+      allow update: if isAdmin()
+        || (authed() && me() == uid && !changed().hasAny(['verified', 'ratingSum', 'ratingCount', 'deliveries']))
+        || (authed() && me() != uid && changed().hasOnly(['ratingSum', 'ratingCount', 'deliveries']));
+    }
+
+    // Annonces de marchandises : publiques, coordonnées dans /private
+    match /loads/{id} {
+      allow read: if authed();
+      allow create: if authed() && request.resource.data.ownerUid == me();
+      allow update: if isAdmin() || (authed() && resource.data.ownerUid == me()
+        && request.resource.data.ownerUid == me());
+      allow delete: if isAdmin() || (authed() && resource.data.ownerUid == me());
+      match /private/{doc} {
+        allow read: if authed() && (get(/databases/$(database)/documents/loads/$(id)).data.ownerUid == me()
+          || exists(/databases/$(database)/documents/unlocks/$(id + '_' + me())) || isAdmin());
+        allow write: if authed() && get(/databases/$(database)/documents/loads/$(id)).data.ownerUid == me();
+      }
+    }
+
+    // Trajets des transporteurs
+    match /trips/{id} {
+      allow read: if authed();
+      allow create: if authed() && request.resource.data.ownerUid == me();
+      allow update: if isAdmin() || (authed() && resource.data.ownerUid == me()
+        && request.resource.data.ownerUid == me());
+      allow delete: if isAdmin() || (authed() && resource.data.ownerUid == me());
+    }
+
+    // Déblocage des coordonnées d'une marchandise
+    match /unlocks/{id} {
+      allow read: if authed() && (resource.data.uid == me() || isAdmin());
+      allow create: if authed() && request.resource.data.uid == me()
+        && id == request.resource.data.loadId + '_' + me();
+    }
+
+    // Messagerie : seulement les 2 membres
+    match /convos/{id} {
+      allow read: if authed() && (me() in resource.data.members || isAdmin());
+      allow create: if authed() && me() in request.resource.data.members
+        && request.resource.data.members.size() == 2;
+      allow update: if authed() && me() in resource.data.members
+        && request.resource.data.members == resource.data.members;
+      match /messages/{m} {
+        allow read: if authed() && (me() in get(/databases/$(database)/documents/convos/$(id)).data.members || isAdmin());
+        allow create: if authed() && me() in get(/databases/$(database)/documents/convos/$(id)).data.members
+          && (request.resource.data.from == me() || request.resource.data.from == 'sys');
+        allow update: if authed() && me() in get(/databases/$(database)/documents/convos/$(id)).data.members
+          && changed().hasOnly(['status']);
+      }
+    }
+
+    // Réservations / courses
+    match /bookings/{id} {
+      allow read: if authed() && (me() in resource.data.members || isAdmin());
+      allow create: if authed() && me() in request.resource.data.members
+        && request.resource.data.members.size() == 2;
+      allow update: if isAdmin() || (authed() && me() in resource.data.members
+        && request.resource.data.members == resource.data.members
+        && request.resource.data.carrierUid == resource.data.carrierUid
+        && request.resource.data.shipperUid == resource.data.shipperUid);
+    }
+
+    // Signalements, assistance, SOS : lisibles seulement par les admins
+    match /reports/{id} {
+      allow create: if authed() && request.resource.data.by == me();
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}

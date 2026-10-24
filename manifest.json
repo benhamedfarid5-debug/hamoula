@@ -1,0 +1,14 @@
+{
+  "name": "Hamoula — Transport de marchandises",
+  "short_name": "Hamoula",
+  "description": "Transporteurs et expéditeurs en Algérie. Ne rentrez plus à vide.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef2ef",
+  "theme_color": "#0b5a3e",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
