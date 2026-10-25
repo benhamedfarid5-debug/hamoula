@@ -289,6 +289,8 @@ button.w{cursor:pointer}
 .ab-pin{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;flex:none;color:#fff}
 .ab-pin.a{background:var(--brand);color:var(--brand-ink)}.ab-pin.b{background:var(--route-load);color:var(--accent-ink)}
 .ab-line{width:2px;height:16px;margin-inline-start:14px;background:repeating-linear-gradient(180deg,var(--muted) 0 3px,transparent 3px 6px)}
+.back-btn{display:inline-flex;align-items:center;gap:4px;border:0;background:var(--surface2);color:var(--ink);border-radius:10px;padding:8px 12px 8px 8px;font-weight:600;font-size:15px;min-height:44px;flex:none}
+.back-btn:hover{background:var(--line)}
 .svc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .svc{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);font-size:13px;font-weight:600;text-align:center;min-height:92px;justify-content:center}
 .svc .ic{color:var(--brand)}
@@ -1185,7 +1187,7 @@ function renderOv(){
   const views={alerts:alertsView,history:historyView,clients:clientsView,carrier:carrierView,detail:detailView,form:formView,convo:convoView,booking:bookingView,services:servicesView,srv:srvView};
   let title=OV_TITLES[top.v];title=typeof title==='function'?title(top.p):title;
   if(top.v==='convo'){const c=S.convos.find(x=>x.id===top.p.id);if(c)title=null,top._t=convoPartner(c).name}
-  ov.innerHTML=`<div class="ov-in"><div class="ov-head"><div class="wrap"><button class="icon-btn" onclick="A.back()" aria-label="${t('back')}">${ic('back',24,'flip-rtl')}</button><h2>${esc(title?t(title):top._t)}</h2></div></div>${views[top.v](top.p)}</div>`;
+  ov.innerHTML=`<div class="ov-in"><div class="ov-head"><div class="wrap"><button class="back-btn" onclick="A.back()" aria-label="${t('back')}">${ic('back',22,'flip-rtl')}<span>${t('back')}</span></button><h2>${esc(title?t(title):top._t)}</h2></div></div>${views[top.v](top.p)}</div>`;
   if(S.lang==='ar')ov.querySelectorAll('.flip-rtl').forEach(e=>e.style.transform='scaleX(-1)');
   ov.hidden=false;document.body.style.overflow='hidden';
   initSig();
@@ -1196,13 +1198,15 @@ function initSig(){const c=document.getElementById('sig');if(!c||c._ok)return;c.
   c.addEventListener('pointerdown',e=>{d=true;c.setPointerCapture(e.pointerId);const [a,b]=pos(e);x.beginPath();x.moveTo(a,b)});
   c.addEventListener('pointermove',e=>{if(!d)return;const [a,b]=pos(e);x.lineTo(a,b);x.stroke();c._dirty=true});
   ['pointerup','pointercancel'].forEach(ev=>c.addEventListener(ev,()=>d=false))}
-function modal(html){const m=$('#modal');m.innerHTML=`<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;m.hidden=false;m.onclick=e=>{if(e.target===m)A.closeModal()}}
+function modal(html){const m=$('#modal');if(m.hidden){hPush({hm:1});ui.hModal=true}m.innerHTML=`<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;m.hidden=false;m.onclick=e=>{if(e.target===m)A.closeModal()}}
 
 // ---------- Actions ----------
 const A={
-  tab(k){if(msgUnsub){msgUnsub();msgUnsub=null}ui.tab=k;ui.stack=[];window.scrollTo(0,0);render()},
-  open(v,p={}){if(v==='form')ui.photo=null;ui.stack.push({v,p});if(v==='convo')A.listenMsgs(p.id);render();$('#ov').scrollTop=0;if(v==='convo')renderOv()},
-  back(){const top=ui.stack.pop();if(top&&top.v==='convo'&&msgUnsub){msgUnsub();msgUnsub=null}render()},
+  tab(k){if(msgUnsub){msgUnsub();msgUnsub=null}if((ui.tab||'home')==='home'&&k!=='home'&&!ui.stack.length){hPush({ht:k});ui.hTab=true}
+    if(k==='home')ui.hTab=false;ui.tab=k;ui.stack=[];window.scrollTo(0,0);render()},
+  open(v,p={}){if(v==='form')ui.photo=null;hPush({ho:ui.stack.length+1});ui.hDepth=(ui.hDepth||0)+1;ui.stack.push({v,p});if(v==='convo')A.listenMsgs(p.id);render();$('#ov').scrollTop=0;if(v==='convo')renderOv()},
+  back(){if(ui.hDepth>0){history.back();return}A._pop()},
+  _pop(){const top=ui.stack.pop();if(top&&top.v==='convo'&&msgUnsub){msgUnsub();msgUnsub=null}render()},
   lang(l){S.lang=l;persist();render()},
   role(r){ui.hf=null;S.user.active=r;persist();toast(t('switched')+t(r==='trans'?'role_trans':'role_client'));render()},
   f(k,v){ui.filters[k]=v;render()},
@@ -1282,7 +1286,7 @@ const A={
       toast(t('published'));ui.stack.pop();ui.stack.push({v:'detail',p:{kind:'trip',id:ref.id}});render();
     }}catch(e){if(btn)btn.disabled=false;fail(e)}
     $('#ov').scrollTop=0},
-  del(kind,id){db.doc((kind==='load'?'loads/':'trips/')+id).update({status:'deleted'}).then(()=>{toast(t('deleted'));ui.stack.pop();render()}).catch(fail)},
+  del(kind,id){db.doc((kind==='load'?'loads/':'trips/')+id).update({status:'deleted'}).then(()=>{toast(t('deleted'));A.back()}).catch(fail)},
   full(id){db.doc('trips/'+id).update({capFree:0,status:'full'}).then(()=>toast(t('marked_full'))).catch(fail)},
   capModal(id){const tr=getItem('trip',id);modal(`<div class="h2">${t('cap_free')}</div><div class="field"><label for="cf2">${t('cap_free')}</label><input id="cf2" type="number" min="0" inputmode="decimal" value="${tr.capFree}"></div>
     <div class="actions"><button class="btn btn-o" onclick="A.closeModal()">${t('cancel')}</button><button class="btn btn-p" onclick="A.saveCap('${id}')">${t('save')}</button></div>`)},
@@ -1391,8 +1395,16 @@ const A={
   doc(k,inp){const f=inp.files&&inp.files[0];if(!f)return;if(!/^image\//.test(f.type)){toast(t('img_only'));return}
     compressImg(f,u=>{db.doc(`users/${uid()}/private/docs`).set({[k]:{name:f.name,data:u,ts:NOW()}},{merge:true})
       .then(()=>saveUser({['docs.'+k]:{name:f.name,status:'pending',ts:NOW()}})).then(()=>toast(t('uploaded'))).catch(fail)})},
-  closeModal(){const m=$('#modal');m.hidden=true;m.innerHTML=''}
+  closeModal(){const m=$('#modal');if(m.hidden)return;m.hidden=true;m.innerHTML='';if(ui.hModal){ui.hModal=false;ui.pendingBack=true;setTimeout(()=>{if(ui.pendingBack){ui.pendingBack=false;ui.skipPop=true;history.back()}},0)}}
 };
+function hPush(st){try{if(ui.pendingBack){ui.pendingBack=false;history.replaceState(st,'')}else history.pushState(st,'')}catch(e){}}
+// Touche « retour » du téléphone : ferme la fenêtre ou revient à l'écran précédent au lieu de quitter l'app
+window.addEventListener('popstate',()=>{
+  if(ui.skipPop){ui.skipPop=false;return}
+  const m=$('#modal');if(!m.hidden){ui.hModal=false;m.hidden=true;m.innerHTML='';return}
+  if(ui.stack.length){ui.hDepth=Math.max(0,(ui.hDepth||0)-1);A._pop();return}
+  if((ui.tab||'home')!=='home'){ui.hTab=false;ui.tab='home';window.scrollTo(0,0);render();return}
+});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('#modal').hidden)A.closeModal();else if(ui.stack.length)A.back()}});
 document.addEventListener('focusout',()=>{});
 render();
